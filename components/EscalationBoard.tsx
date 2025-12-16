@@ -14,7 +14,7 @@ export const EscalationBoard: React.FC<EscalationBoardProps> = ({ tickets, onUpd
   // 2. Must NOT be Resolved
   const escalatedTickets = tickets.filter(t => {
     const isPriorityEscalation = t.priority === TicketPriority.CRITICAL || t.priority === TicketPriority.HIGH;
-    const isStatusEscalation = t.status === 'Escalado' || t.status === TicketStatus.ESCALATED;
+    const isStatusEscalation = t.status === TicketStatus.ESCALATED;
     const isResolved = t.status === TicketStatus.RESOLVED;
     
     return (isPriorityEscalation || isStatusEscalation) && !isResolved;

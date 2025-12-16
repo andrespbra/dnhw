@@ -12,7 +12,8 @@ import {
   RefreshCw,
   Loader2,
   WifiOff,
-  Database
+  Database,
+  Settings
 } from 'lucide-react';
 import { Ticket, TicketStatus, TicketPriority, SubjectCode } from './types';
 import { TicketForm } from './components/TicketForm';
@@ -20,7 +21,7 @@ import { StatsCard } from './components/StatsCard';
 import { EscalationBoard } from './components/EscalationBoard';
 import { TicketDetailsModal } from './components/TicketDetailsModal';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { supabase } from './services/supabaseClient';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'new-ticket' | 'escalation' | 'history'>('dashboard');
@@ -36,6 +37,13 @@ function App() {
 
   // 1. Fetch Tickets
   const fetchTickets = async () => {
+    // If credentials are plainly missing, don't even try to fetch
+    if (!isSupabaseConfigured) {
+       setIsLoading(false);
+       setError('CREDENTIALS_MISSING');
+       return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -50,15 +58,17 @@ function App() {
         setTickets(data as Ticket[]);
       }
     } catch (err: any) {
-      console.error('Erro detalhado ao buscar chamados:', JSON.stringify(err, null, 2));
+      console.error('Erro ao buscar chamados:', err);
       
       let msg = err.message || 'Erro desconhecido.';
-      if (err.code === '42P01') {
-        msg = 'Tabela "tickets" não encontrada. Verifique se você rodou o script SQL no Painel do Supabase.';
+      
+      // Handle network/fetch errors
+      if (msg.includes('Failed to fetch')) {
+        msg = 'Falha de conexão. O app não conseguiu contatar o Supabase.';
+      } else if (err.code === '42P01') {
+        msg = 'Tabela "tickets" não encontrada. Execute o SQL de configuração.';
       } else if (err.code === 'PGRST301') {
-        msg = 'Erro de permissão (RLS). Crie uma Policy no Supabase para permitir acesso.';
-      } else if (msg === 'Failed to fetch') {
-        msg = 'Falha de conexão. Verifique se a URL do Supabase no .env está correta.';
+        msg = 'Erro de permissão (RLS). Verifique as Policies no Supabase.';
       }
 
       setError(msg);
@@ -76,6 +86,11 @@ function App() {
 
   // 2. Create Ticket
   const handleCreateTicket = async (newTicketData: Omit<Ticket, 'id' | 'createdAt'>) => {
+    if (!isSupabaseConfigured) {
+        alert("Configure o Supabase no arquivo .env para salvar dados.");
+        return;
+    }
+    
     setIsLoading(true);
     
     // Clean payload
@@ -101,6 +116,8 @@ function App() {
 
   // 3. Update Ticket
   const handleUpdateTicket = async (id: string, updates: Partial<Ticket>) => {
+    if (!isSupabaseConfigured) return;
+
     try {
       // Optimistic update
       setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
@@ -269,21 +286,41 @@ function App() {
         <div className="flex-1 overflow-y-auto p-6">
           
           {error ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500 animate-in fade-in zoom-in-95">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                  <WifiOff className="w-8 h-8 text-red-500" />
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 animate-in fade-in zoom-in-95 p-4">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${error === 'CREDENTIALS_MISSING' ? 'bg-orange-100' : 'bg-red-100'}`}>
+                  {error === 'CREDENTIALS_MISSING' ? (
+                     <Settings className="w-8 h-8 text-orange-500" />
+                  ) : (
+                     <WifiOff className="w-8 h-8 text-red-500" />
+                  )}
                 </div>
-                <h3 className="text-lg font-bold text-slate-800 mb-2">Erro de Conexão</h3>
-                <p className="text-center max-w-md text-sm mb-6">{error}</p>
-                <div className="flex gap-2">
-                   <button 
-                    onClick={fetchTickets}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Tentar Novamente
-                  </button>
-                </div>
+                
+                <h3 className="text-lg font-bold text-slate-800 mb-2">
+                    {error === 'CREDENTIALS_MISSING' ? 'Configuração Necessária' : 'Erro de Conexão'}
+                </h3>
+                
+                <p className="text-center max-w-md text-sm mb-6 text-slate-600">
+                    {error === 'CREDENTIALS_MISSING' 
+                        ? 'Para utilizar este app, você precisa configurar as variáveis de ambiente do Supabase.' 
+                        : error
+                    }
+                </p>
+
+                {error === 'CREDENTIALS_MISSING' && (
+                    <div className="bg-slate-900 rounded-lg p-4 max-w-lg w-full mb-6 overflow-x-auto text-left">
+                        <p className="text-slate-400 text-xs mb-2 uppercase tracking-wider font-bold">Adicione ao arquivo .env:</p>
+                        <code className="text-xs text-green-400 font-mono block">VITE_SUPABASE_URL=sua_url_do_projeto</code>
+                        <code className="text-xs text-green-400 font-mono block mt-1">VITE_SUPABASE_ANON_KEY=sua_chave_anonima</code>
+                    </div>
+                )}
+
+                <button 
+                  onClick={fetchTickets}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Tentar Novamente
+                </button>
             </div>
           ) : isLoading && tickets.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400">
@@ -350,17 +387,21 @@ function App() {
                     {/* Recent Activity Mini List */}
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                       <h3 className="text-lg font-bold text-slate-800 mb-4">Recentes</h3>
-                      <div className="space-y-4">
-                        {tickets.slice(0, 4).map(t => (
-                          <div key={t.id} className="flex items-start gap-3 pb-3 border-b border-slate-50 last:border-0 last:pb-0">
-                            <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${t.priority === 'Crítica' ? 'bg-red-500' : 'bg-blue-500'}`} />
-                            <div>
-                              <p className="text-sm font-medium text-slate-800 line-clamp-1">{t.analystAction}</p>
-                              <p className="text-xs text-slate-500">{t.clientName} • {new Date(t.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                      {tickets.length === 0 ? (
+                        <p className="text-sm text-slate-400 italic">Nenhum chamado registrado.</p>
+                      ) : (
+                        <div className="space-y-4">
+                            {tickets.slice(0, 4).map(t => (
+                            <div key={t.id} className="flex items-start gap-3 pb-3 border-b border-slate-50 last:border-0 last:pb-0">
+                                <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${t.priority === 'Crítica' ? 'bg-red-500' : 'bg-blue-500'}`} />
+                                <div>
+                                <p className="text-sm font-medium text-slate-800 line-clamp-1">{t.analystAction}</p>
+                                <p className="text-xs text-slate-500">{t.clientName} • {new Date(t.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                            ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

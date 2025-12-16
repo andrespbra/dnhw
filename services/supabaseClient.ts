@@ -5,8 +5,14 @@ const env = (import.meta as any).env || {};
 const supabaseUrl = env.VITE_SUPABASE_URL;
 const supabaseKey = env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn("ATENÇÃO: Credenciais do Supabase não encontradas. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env");
+export const isSupabaseConfigured = 
+  supabaseUrl && 
+  supabaseKey && 
+  supabaseUrl !== 'https://placeholder.supabase.co' &&
+  !supabaseUrl.includes('placeholder');
+
+if (!isSupabaseConfigured) {
+  console.warn("ATENÇÃO: Credenciais do Supabase não encontradas ou inválidas.");
 }
 
 export const supabase = createClient(
