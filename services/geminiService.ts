@@ -1,7 +1,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TicketPriority, SubjectCode } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Safely get API key without crashing if process is undefined
+const getApiKey = () => {
+  try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env) {
+      // @ts-ignore
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    return undefined;
+  }
+  return undefined;
+};
+
+const apiKey = getApiKey();
+// Only instantiate if key exists to prevent errors, otherwise allow app to load without AI
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 interface AnalysisResult {
   priority: TicketPriority;
@@ -11,6 +27,16 @@ interface AnalysisResult {
 }
 
 export const analyzeTicketContent = async (description: string, clientName: string): Promise<AnalysisResult> => {
+  if (!ai) {
+    console.warn("Gemini API Key missing");
+    return {
+      priority: TicketPriority.MEDIUM,
+      subjectCode: SubjectCode.CODE_1200,
+      analystAction: "Verificar relato (IA indisponível).",
+      suggestedNextStep: "Investigação manual necessária."
+    };
+  }
+
   try {
     const prompt = `
       Analise o seguinte relato de um chamado técnico e extraia informações estruturadas.
