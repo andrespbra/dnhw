@@ -1,0 +1,7 @@
+{
+  "name": "diario-de-bordo",
+  "version": "1.0.0",
+  "description": "App de registro de atendimentos",
+  "type": "module",
+  "dependencies": {}
+}
